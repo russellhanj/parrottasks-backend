@@ -20,6 +20,5 @@ websockets==15.0.1
 
 # Database stack
 sqlalchemy>=2.0
-psycopg[binary]>=3.1
 psycopg2-binary>=2.9
 alembic>=1.13

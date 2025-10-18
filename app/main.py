@@ -2,7 +2,7 @@ import os
 from typing import List
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
@@ -115,3 +115,9 @@ def get_tasks(rid: str, db: Session = Depends(get_db)):
         }
         for t in tasks
     ]
+
+@app.get("/stats")
+def stats(db: Session = Depends(get_db)):
+    recs = db.query(func.count(Recording.id)).scalar() or 0
+    tasks = db.query(func.count(Task.id)).scalar() or 0
+    return {"recordings": recs, "tasks": tasks}
