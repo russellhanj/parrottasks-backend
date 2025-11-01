@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 import enum
 import uuid
-
+from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,8 +26,13 @@ class TaskStatusEnum(str, enum.Enum):
 
 
 class RecordingStatusEnum(str, enum.Enum):
-    uploaded = "uploaded"
+    # new pipeline states
+    queued = "queued"
     processing = "processing"
+    ready = "ready"
+    failed = "failed"
+    # legacy states (seen in prod)
+    uploaded = "uploaded"
     transcribed = "transcribed"
     summarized = "summarized"
     error = "error"
@@ -68,7 +73,10 @@ class Recording(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     duration_sec: Mapped[Optional[int]] = mapped_column(Integer)
     status: Mapped[RecordingStatusEnum] = mapped_column(
-        Enum(RecordingStatusEnum), default=RecordingStatusEnum.uploaded, nullable=False, index=True
+        PGEnum(RecordingStatusEnum, name="recordingstatusenum", create_type=False),
+        server_default="queued",   # server-side default; matches the enum label
+        nullable=False,
+        index=True,
     )
 
     # Relationships
