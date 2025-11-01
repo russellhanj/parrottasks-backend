@@ -23,6 +23,9 @@ from app.db import engine, SessionLocal
 from app.models import Recording, Transcript, Task, RecordingStatusEnum, User
 from app.r2 import upload_fileobj
 
+from worker.queue import q_long, retry_policy, redis
+from worker.jobs.transcribe import transcribe_recording
+
 load_dotenv()
 
 app = FastAPI(title="ParrotTasks API")
@@ -259,9 +262,40 @@ def get_tasks(rid: str, db: Session = Depends(get_db)):
         for t in tasks
     ]
 
+@app.post("/recordings/{recording_id}/process")
+def trigger_processing(recording_id: str, db: Session = Depends(get_db)):
+    rec = db.query(Recording).filter(Recording.id == recording_id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    # Normalize legacy statuses to queued so the pipeline can run
+    legacy_statuses = {
+        RecordingStatusEnum.uploaded,
+        RecordingStatusEnum.transcribed,
+        RecordingStatusEnum.summarized,
+        RecordingStatusEnum.error,
+    }
+    if rec.status in legacy_statuses:
+        rec.status = RecordingStatusEnum.queued
+        db.commit()
+
+    # If it’s already processing or ready, don’t enqueue again
+    if rec.status in (RecordingStatusEnum.processing, RecordingStatusEnum.ready):
+        return {"ok": True, "status": rec.status.value, "jobId": None}
+
+    # Enqueue the transcription job (MVP stub for now)
+    job = q_long.enqueue(transcribe_recording, recording_id, retry=retry_policy())
+    return {"ok": True, "status": rec.status.value, "jobId": job.get_id()}
 
 @app.get("/stats")
 def stats(db: Session = Depends(get_db)):
     recs = db.query(func.count(Recording.id)).scalar() or 0
     tasks = db.query(func.count(Task.id)).scalar() or 0
     return {"recordings": recs, "tasks": tasks}
+
+@app.get("/healthz/worker")
+def worker_health():
+    try:
+        return {"redis": bool(redis.ping())}
+    except Exception as e:
+        return {"redis": False, "error": str(e)}

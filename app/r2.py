@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from functools import lru_cache
 from typing import BinaryIO, Optional
 
@@ -81,3 +82,32 @@ def delete_object(key: str) -> None:
         # Deletion failures shouldn't crash the request path for MVP.
         # Log later with Sentry; for now, swallow.
         pass
+
+def download_to_temp(key: str) -> str:
+    """
+    Download the R2 object at `key` to a local temp file and return the file path.
+    Caller is responsible for os.remove(path) when done.
+
+    Example:
+        p = download_to_temp(rec.r2_key)
+        try:
+            ... use p ...
+        finally:
+            os.remove(p)
+    """
+    # preserve original extension if present (nice for ffmpeg)
+    _, ext = os.path.splitext(key)
+    fd, path = tempfile.mkstemp(prefix="r2_", suffix=ext or ".bin")
+    os.close(fd)
+
+    try:
+        with open(path, "wb") as f:
+            s3_client().download_fileobj(bucket_name(), key, f)
+    except (BotoCoreError, ClientError) as e:
+        # clean up the empty temp file on failure
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        raise
+    return path
