@@ -1,6 +1,6 @@
 import datetime as dt
 from app.db import SessionLocal
-from app.models import Recording, Transcript
+from app.models import Recording, Transcript, RecordingStatusEnum
 
 def summarize_recording(recording_id: str):
     db = SessionLocal()
@@ -17,14 +17,14 @@ def summarize_recording(recording_id: str):
 
         rec.summarized_at = dt.datetime.utcnow()
         rec.tasks_extracted_at = dt.datetime.utcnow()
-        rec.status = "ready"
+        rec.status = RecordingStatusEnum.ready
         db.commit()
         return {"ok": True}
     except Exception as e:
         try:
             rec = db.get(Recording, recording_id)
             if rec:
-                rec.status = "failed"
+                rec.status = RecordingStatusEnum.failed
                 if hasattr(rec, "error_log"):
                     rec.error_log = (str(e) or "")[:4000]
                 db.commit()

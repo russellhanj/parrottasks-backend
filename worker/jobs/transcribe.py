@@ -5,7 +5,7 @@ import tempfile
 from sqlalchemy import select
 from worker.queue import q_default, retry_policy
 from app.db import SessionLocal
-from app.models import Recording, Transcript
+from app.models import Recording, Transcript, RecordingStatusEnum
 from app.r2 import download_to_temp
 
 from worker.jobs.summarize import summarize_recording  # late import avoidance
@@ -45,7 +45,7 @@ def transcribe_recording(recording_id: str):
             raise ValueError("Recording is missing r2_key")
 
         # mark as processing
-        rec.status = "processing"
+        rec.status = RecordingStatusEnum.processing
         if getattr(rec, "upload_completed_at", None) is None:
             rec.upload_completed_at = dt.datetime.utcnow()
         db.commit()
@@ -76,7 +76,7 @@ def transcribe_recording(recording_id: str):
         try:
             rec = db.get(Recording, recording_id)
             if rec:
-                rec.status = "failed"
+                rec.status = RecordingStatusEnum.failed
                 if hasattr(rec, "error_log"):
                     rec.error_log = (str(e) or "")[:4000]
                 db.commit()
